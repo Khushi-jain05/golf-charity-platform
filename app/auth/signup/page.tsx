@@ -32,13 +32,22 @@ export default function SignUp() {
     }
 
     if (data.user) {
-      await supabase.from('profiles').insert({
-        id: data.user.id,
-        email,
-        full_name: fullName,
-        role: 'subscriber',
-        subscription_status: 'inactive'
-      })
+      const userId = data.user.id
+    
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: userId,
+          email,
+          full_name: fullName,
+          role: 'subscriber',
+          subscription_status: 'inactive'
+        })
+    
+      if (profileError) {
+        console.log(profileError)
+      }
+    
       router.push('/dashboard')
     }
   }

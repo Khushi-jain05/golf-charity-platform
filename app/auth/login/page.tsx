@@ -31,25 +31,11 @@ export default function Login() {
     }
 
     if (data.user) {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', data.user.id)
-        .single()
-
-      if (profileError) {
-        setError('Failed to fetch profile')
-        setLoading(false)
-        return
-      }
-
+      console.log("LOGIN SUCCESS")
+    
       setLoading(false)
-
-      if (profile?.role === 'admin') {
-        router.push('/admin')
-      } else {
-        router.push('/dashboard')
-      }
+    
+      router.replace('/dashboard') // ✅ instant redirect
     }
   }
 

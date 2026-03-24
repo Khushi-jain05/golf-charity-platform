@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 export default function Home() {
   return (
     <main>
@@ -7,9 +9,12 @@ export default function Home() {
         <div className="logo">GolfGives</div>
 
         <div className="nav-links">
-          <a href="#">Charities</a>
-          <a href="#">How it works</a>
-          <a href="#" className="nav-cta">Get started</a>
+          <Link href="/charities">Charities</Link>
+          <Link href="/how-it-works">How it works</Link>
+
+          <Link href="/auth/signup" className="nav-cta">
+            Get started
+          </Link>
         </div>
       </nav>
 
@@ -27,8 +32,13 @@ export default function Home() {
         </p>
 
         <div className="hero-btns">
-          <button className="btn-primary">Start for free →</button>
-          <button className="btn-secondary">How it works</button>
+          <Link href="/auth/signup" className="btn-primary">
+            Start for free →
+          </Link>
+
+          <Link href="/how-it-works" className="btn-secondary">
+            How it works
+          </Link>
         </div>
       </div>
 
@@ -90,7 +100,10 @@ export default function Home() {
       <div className="cta-box">
         <h2>Ready to make your round count?</h2>
         <p>Join hundreds of golfers already making a difference.</p>
-        <button className="btn-primary">Join GolfGives today →</button>
+
+        <Link href="/auth/signup" className="btn-primary">
+          Join GolfGives today →
+        </Link>
       </div>
 
     </main>
