@@ -1,5 +1,4 @@
 'use client'
-
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
@@ -7,9 +6,9 @@ import { useRouter } from 'next/navigation'
 
 export default function Login() {
   const router = useRouter()
-
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [remember, setRemember] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -17,168 +16,147 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     setError('')
-
-    const { data, error: loginError } =
-      await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-    if (loginError) {
-      setError(loginError.message)
-      setLoading(false)
-      return
-    }
-
-    if (data.user) {
-      console.log("LOGIN SUCCESS")
-    
-      setLoading(false)
-    
-      router.replace('/dashboard') // ✅ instant redirect
-    }
+    const { data, error: loginError } = await supabase.auth.signInWithPassword({ email, password })
+    if (loginError) { setError(loginError.message); setLoading(false); return }
+    if (data.user) { setLoading(false); router.replace('/dashboard') }
   }
 
-  // ✅ Google Auth (now functional)
   const handleGoogleLogin = async () => {
     setLoading(true)
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-    })
-
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-    }
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' })
+    if (error) { setError(error.message); setLoading(false) }
   }
 
   return (
-   // ONLY styling improved — logic untouched
+    <main className="min-h-screen bg-[#f0f7f4] flex flex-col items-center justify-center px-6 py-12">
 
-<main className="min-h-screen bg-[#050a06] text-white flex items-center justify-center px-6 relative overflow-hidden">
-
-{/* Background glow (stronger + smoother) */}
-<div className="absolute top-[-100px] left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-green-400/10 blur-[120px] opacity-40 pointer-events-none" />
-
-<div className="w-full max-w-md relative z-10">
-
-  {/* Logo */}
-  <div className="text-center mb-10">
-    <Link href="/" className="text-2xl font-semibold text-green-400 tracking-tight">
-      GolfGives
-    </Link>
-
-    <h1 className="text-3xl font-bold mt-6 mb-2 tracking-tight">
-      Welcome back
-    </h1>
-
-    <p className="text-sm text-white/40">
-      Sign in to your account
-    </p>
-  </div>
-
-  {/* Card */}
-  <div className="bg-[#0d1a10]/90 backdrop-blur-md border border-green-400/10 rounded-3xl p-8 shadow-[0_0_40px_rgba(74,222,128,0.05)]">
-
-    {error && (
-      <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl mb-6">
-        {error}
-      </div>
-    )}
-
-    <form onSubmit={handleLogin} className="space-y-5">
-
-      {/* Email */}
-      <div>
-        <label className="block text-[11px] text-white/40 mb-2 font-medium uppercase tracking-wider">
-          Email
-        </label>
-
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          disabled={loading}
-          className="w-full bg-[#050a06] border border-white/10 hover:border-white/20 focus:border-green-400 focus:ring-1 focus:ring-green-400/30 rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 outline-none transition-all duration-200"
-          placeholder="you@example.com"
-        />
+      {/* Logo */}
+      <div className="flex flex-col items-center mb-8">
+        <div className="w-12 h-12 bg-green-600 rounded-2xl flex items-center justify-center mb-3 shadow-md">
+          <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">GolfGives</h1>
+        <p className="text-sm text-gray-400 mt-1">Welcome back! Sign in to your account</p>
       </div>
 
-      {/* Password */}
-      <div>
-        <div className="flex justify-between items-center mb-2">
-          <label className="block text-[11px] text-white/40 font-medium uppercase tracking-wider">
-            Password
-          </label>
+      {/* Card */}
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
 
-          <Link
-            href="/auth/forgot-password"
-            className="text-xs text-green-400/70 hover:text-green-400 transition"
-          >
-            Forgot password?
-          </Link>
+        <div className="text-center mb-6">
+          <h2 className="text-xl font-bold text-gray-900">Sign In</h2>
+          <p className="text-sm text-gray-400 mt-1">Enter your credentials to continue</p>
         </div>
 
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          disabled={loading}
-          className="w-full bg-[#050a06] border border-white/10 hover:border-white/20 focus:border-green-400 focus:ring-1 focus:ring-green-400/30 rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 outline-none transition-all duration-200"
-          placeholder="••••••••"
-        />
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-5">
+            {error}
+          </div>
+        )}
+
+        {/* Social buttons */}
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          <button
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            className="flex items-center justify-center gap-2.5 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm transition">
+            <svg className="w-4 h-4" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            Google
+          </button>
+          <button
+            disabled={loading}
+            className="flex items-center justify-center gap-2.5 border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold py-2.5 rounded-xl text-sm transition">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+            </svg>
+            Apple
+          </button>
+        </div>
+
+        {/* Divider */}
+        <div className="flex items-center gap-3 mb-5">
+          <div className="flex-1 h-px bg-gray-100" />
+          <span className="text-xs text-gray-400">or continue with email</span>
+          <div className="flex-1 h-px bg-gray-100" />
+        </div>
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={loading}
+              className="w-full border border-gray-200 hover:border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-500/10 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition"
+              placeholder="you@example.com"
+            />
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="block text-sm font-medium text-gray-700">Password</label>
+              <Link href="/auth/forgot-password" className="text-xs text-green-600 hover:text-green-700 font-medium transition">
+                Forgot password?
+              </Link>
+            </div>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={loading}
+              className="w-full border border-gray-200 hover:border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-500/10 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition"
+              placeholder="Enter your password"
+            />
+          </div>
+
+          {/* Remember me */}
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setRemember(!remember)}
+              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition
+                ${remember ? 'border-green-600 bg-green-600' : 'border-gray-300'}`}>
+              {remember && (
+                <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+            <span className="text-sm text-gray-600">Remember me</span>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition">
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"/>
+                  <path fill="currentColor" d="M4 12a8 8 0 018-8v8z" className="opacity-75"/>
+                </svg>
+                Signing in...
+              </span>
+            ) : 'Sign In'}
+          </button>
+        </form>
       </div>
 
-      {/* Submit */}
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full bg-green-400 hover:bg-green-300 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-[#050a06] font-semibold py-3 rounded-full text-sm transition-all duration-200 mt-2 shadow-md"
-      >
-        {loading ? (
-          <span className="flex items-center justify-center gap-2">
-            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-              <path fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-            </svg>
-            Signing in...
-          </span>
-        ) : (
-          'Sign in →'
-        )}
-      </button>
-    </form>
-
-    {/* Divider */}
-    <div className="flex items-center gap-3 my-6">
-      <div className="flex-1 h-px bg-white/10" />
-      <span className="text-xs text-white/30">or</span>
-      <div className="flex-1 h-px bg-white/10" />
-    </div>
-
-    {/* Google Login */}
-    <button
-      onClick={handleGoogleLogin}
-      disabled={loading}
-      className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 font-medium py-3 rounded-full text-sm transition flex items-center justify-center gap-3 disabled:opacity-40"
-    >
-      Continue with Google
-    </button>
-  </div>
-
-  {/* Footer */}
-  <p className="text-center text-white/30 text-xs mt-6">
-    Don't have an account?{' '}
-    <Link
-      href="/auth/signup"
-      className="text-green-400 hover:text-green-300 transition"
-    >
-      Sign up free
-    </Link>
-  </p>
-</div>
-</main>
+      <p className="text-sm text-gray-500 mt-6">
+        Don't have an account?{' '}
+        <Link href="/auth/signup" className="text-green-600 hover:text-green-700 font-semibold">
+          Create one
+        </Link>
+      </p>
+    </main>
   )
 }
