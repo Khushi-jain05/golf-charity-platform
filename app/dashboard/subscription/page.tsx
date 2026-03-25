@@ -26,27 +26,65 @@ export default function Subscription() {
     load()
   }, [])
 
-  const currentPlan = profile?.plan || 'pro'
+  const currentPlan = profile?.subscription_plan || 'starter'
+  const handleCancel = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+  
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        subscription_plan: 'starter',
+        subscription_status: 'inactive'
+      })
+      .eq('id', user.id)
+  
+    if (!error) {
+      setProfile((p: any) => ({
+        ...p,
+        subscription_plan: 'starter',
+        subscription_status: 'inactive'
+      }))
+    } else {
+      console.error(error)
+    }
+  }
 
   const handleSwitch = async (planId: string) => {
     if (planId === currentPlan) return
+  
     setSwitching(planId)
-    await new Promise(r => setTimeout(r, 800))
-    await supabase.from('profiles').update({ plan: planId }).eq('id', profile.id)
-    setProfile((p: any) => ({ ...p, plan: planId }))
+  
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+  
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        subscription_plan: planId,
+        subscription_status: 'active'
+      })
+      .eq('id', user.id)
+  
+    if (!error) {
+      setProfile((p: any) => ({
+        ...p,
+        subscription_plan: planId,
+        subscription_status: 'active'
+      }))
+    } else {
+      console.error(error)
+    }
+  
     setSwitching(null)
   }
-
   if (loading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-green-600 text-sm animate-pulse">Loading...</div></div>
 
   return (
     <main className="min-h-screen">
       <header className="bg-white border-b border-gray-100 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
         <h1 className="text-base font-semibold text-gray-900">Subscription</h1>
-        <button className="relative text-gray-400 hover:text-gray-600 transition">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full" />
-        </button>
+       
       </header>
       <div className="p-8 space-y-7">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-5 flex items-center gap-4">
@@ -64,8 +102,8 @@ export default function Subscription() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button className="border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-semibold px-5 py-2 rounded-xl transition">Cancel Plan</button>
-            <button className="bg-green-600 hover:bg-green-500 text-white text-sm font-semibold px-5 py-2 rounded-xl transition flex items-center gap-2">
+            <button  onClick={handleCancel}  className="border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-semibold px-5 py-2 rounded-xl transition">Cancel Plan</button>
+            <button onClick={() => handleSwitch('pro')} className="bg-green-600 hover:bg-green-500 text-white text-sm font-semibold px-5 py-2 rounded-xl transition flex items-center gap-2">
               Upgrade
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
             </button>

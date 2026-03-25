@@ -1,174 +1,313 @@
+'use client'
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-export default function Home() {
+function SparklineChart({ scores }: { scores: any[] }) {
+  if (scores.length === 0) return (
+    <div className="flex items-center justify-center h-full text-sm text-gray-400">No scores yet</div>
+  )
+  const data = [...scores].reverse()
+  const values = data.map(s => s.score)
+  const min = Math.min(...values) - 5
+  const max = Math.max(...values) + 5
+  const width = 440, height = 180
+  const padding = { top: 20, right: 20, bottom: 30, left: 35 }
+  const xStep = (width - padding.left - padding.right) / Math.max(data.length - 1, 1)
+  const yScale = (v: number) => padding.top + ((max - v) / (max - min)) * (height - padding.top - padding.bottom)
+  const points = data.map((s, i) => ({
+    x: padding.left + i * xStep,
+    y: yScale(s.score),
+    date: new Date(s.played_at).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' }),
+  }))
+  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
+  const areaD = `${pathD} L ${points[points.length - 1].x} ${height - padding.bottom} L ${points[0].x} ${height - padding.bottom} Z`
+  const yLabels = [max, Math.round((max + min) / 2), min].map(v => ({ val: Math.round(v), y: yScale(v) }))
   return (
-    <main className="min-h-screen bg-[#f0f7f4] text-gray-900">
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full">
+      <defs>
+        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#22c55e" stopOpacity="0.15" />
+          <stop offset="100%" stopColor="#22c55e" stopOpacity="0.01" />
+        </linearGradient>
+      </defs>
+      {yLabels.map((l) => (
+        <g key={l.val}>
+          <line x1={padding.left} y1={l.y} x2={width - padding.right} y2={l.y} stroke="#e5e7eb" strokeWidth="1" strokeDasharray="4 4" />
+          <text x={padding.left - 6} y={l.y + 4} textAnchor="end" fill="#9ca3af" fontSize="10">{l.val}</text>
+        </g>
+      ))}
+      <path d={areaD} fill="url(#areaGrad)" />
+      <path d={pathD} fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      {points.map((p, i) => (
+        <g key={i}>
+          <circle cx={p.x} cy={p.y} r="4" fill="#22c55e" />
+          <circle cx={p.x} cy={p.y} r="2" fill="white" />
+          <text x={p.x} y={height - 5} textAnchor="middle" fill="#9ca3af" fontSize="9">{p.date}</text>
+        </g>
+      ))}
+    </svg>
+  )
+}
 
-      {/* Navbar */}
-      <nav className="bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center sticky top-0 z-50">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
-            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <span className="font-bold text-gray-900 text-sm tracking-tight">GolfGives</span>
-          <span className="text-gray-400 text-xs tracking-widest uppercase">Play · Win · Give</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <Link href="/auth/login" className="text-sm text-gray-600 hover:text-gray-900 transition font-medium">
-            Log In
-          </Link>
-          <Link href="/auth/signup" className="text-sm bg-green-600 hover:bg-green-700 text-white font-semibold px-5 py-2.5 rounded-xl transition">
-            Get Started
-          </Link>
-        </div>
-      </nav>
+// Charity name lookup for mock ids
+const CHARITY_NAMES: Record<string, string> = {
+  c1: 'CRY — Child Rights', c2: 'Smile Foundation', c3: 'Akshaya Patra',
+  c4: 'Goonj', c5: 'HelpAge India', c6: 'WWF India',
+}
 
-      {/* Hero */}
-      <section className="flex flex-col items-center justify-center text-center px-6 py-28">
-        <div className="inline-flex items-center gap-2 border border-green-200 bg-white text-green-700 text-xs font-medium px-4 py-2 rounded-full mb-8">
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+export default function Dashboard() {
+  const router = useRouter()
+  const [profile, setProfile] = useState<any>(null)
+  const [scores, setScores] = useState<any[]>([])
+  const [charityNames, setCharityNames] = useState<{ id: string; name: string; pct: number }[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/auth/login'); return }
+
+      const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+      setProfile(p)
+
+      const { data: s } = await supabase.from('scores').select('*').eq('user_id', user.id)
+        .order('played_at', { ascending: false }).limit(5)
+      setScores(s || [])
+
+      // Build charity display list from profile
+      const ids: string[] = Array.isArray(p?.charity_ids) ? p.charity_ids : p?.charity_id ? [p.charity_id] : []
+
+      if (ids.length > 0) {
+        // Try to fetch from charities table
+        const { data: cData } = await supabase.from('charities').select('id, name').in('id', ids)
+        if (cData && cData.length > 0) {
+          const pct = Math.floor(100 / cData.length)
+          setCharityNames(cData.map(c => ({ id: c.id, name: c.name, pct })))
+        } else {
+          // Fallback: use mock name map
+          const pct = Math.floor(100 / ids.length)
+          setCharityNames(ids.map(id => ({ id, name: CHARITY_NAMES[id] || p?.charity_name || 'Your charity', pct })))
+        }
+      }
+
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const avgScore = scores.length ? Math.round(scores.reduce((a, s) => a + s.score, 0) / scores.length * 10) / 10 : 0
+  const subscriptionBase = 599
+  const totalCharityGiven = charityNames.length > 0 ? `₹${Math.round(subscriptionBase * 0.10 * charityNames.length)}` : '₹0'
+
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-green-600 text-sm animate-pulse font-medium">Loading...</div>
+    </div>
+  )
+
+  return (
+    <main className="min-h-screen">
+      <header className="bg-white border-b border-gray-100 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
+        <h1 className="text-base font-semibold text-gray-900">Dashboard</h1>
+        <button className="relative text-gray-400 hover:text-gray-600 transition">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
           </svg>
-          Now open for Indian golfers
-        </div>
+          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full" />
+        </button>
+      </header>
 
-        <h1 className="text-5xl md:text-6xl font-black text-gray-900 leading-tight mb-6 max-w-3xl">
-          Play Golf.{' '}
-          <span className="text-green-600">Win Prizes.</span>{' '}
-          <span className="text-red-500">Give Back.</span>
-        </h1>
+      <div className="p-8 space-y-5">
 
-        <p className="text-lg text-gray-500 max-w-xl mb-10 leading-relaxed">
-          Submit your Stableford scores, enter monthly prize draws, and support charities — all through one simple subscription.
-        </p>
-
-        <div className="flex gap-3">
-          <Link href="/auth/signup"
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-7 py-3.5 rounded-xl text-sm transition">
-            Start Playing
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
-          </Link>
-          <Link href="#how-it-works"
-            className="flex items-center gap-2 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-semibold px-7 py-3.5 rounded-xl text-sm transition">
-            Learn More
-          </Link>
-        </div>
-      </section>
-
-      {/* Stats bar */}
-      <section className="bg-white border-t border-b border-gray-100 py-10 px-8">
-        <div className="max-w-4xl mx-auto grid grid-cols-4 gap-8 text-center">
-          {[
-            {
-              icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z',
-              value: '2,400+', label: 'Active Members'
-            },
-            {
-              icon: 'M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z',
-              value: '₹6,200', label: 'Prize Pool This Month'
-            },
-            {
-              icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
-              value: '₹48,000+', label: 'Donated to Charity'
-            },
-            {
-              icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6',
-              value: '3.2', label: 'Average Score Increase'
-            },
-          ].map((s) => (
-            <div key={s.label} className="flex flex-col items-center gap-2">
-              <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center mb-1">
-                <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={s.icon} />
-                </svg>
+        {/* Subscription Banner */}
+        <div className="bg-green-600 rounded-2xl p-5 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-bold text-base">Pro Subscription</span>
+                <span className="bg-white/25 text-white text-xs px-2 py-0.5 rounded-full font-medium">
+                  {profile?.subscription_status === 'active' ? 'Active' : 'Inactive'}
+                </span>
               </div>
-              <div className="text-2xl font-black text-gray-900">{s.value}</div>
-              <div className="text-xs text-gray-400">{s.label}</div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <svg className="w-3.5 h-3.5 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="text-white/70 text-xs">Renews April 18, 2026</span>
+              </div>
+            </div>
+          </div>
+          <Link href="/dashboard/subscription" className="bg-white text-gray-900 text-sm font-semibold px-5 py-2 rounded-xl hover:bg-gray-50 transition">
+            Manage Plan
+          </Link>
+        </div>
+
+        {/* Stat Cards */}
+        <div className="grid grid-cols-4 gap-4">
+          {[
+            { label: 'Average Score', value: avgScore || '—', sub: 'Stableford pts', trend: scores.length >= 2 ? '+2.4 from last month' : null, iconBg: 'bg-green-50', icon: <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="10" strokeWidth={1.5} /><circle cx="12" cy="12" r="3" strokeWidth={1.5} /></svg> },
+            { label: 'Draws Entered', value: scores.length, sub: '3 upcoming', trend: null, iconBg: 'bg-yellow-50', icon: <svg className="w-5 h-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" /></svg> },
+            { label: 'Charity Given', value: totalCharityGiven, sub: `Across ${charityNames.length} charit${charityNames.length === 1 ? 'y' : 'ies'}`, trend: charityNames.length > 0 ? '+₹15 this month' : null, iconBg: 'bg-pink-50', icon: <svg className="w-5 h-5 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg> },
+            { label: 'Total Winnings', value: '₹0', sub: '0 prizes claimed', trend: null, iconBg: 'bg-blue-50', icon: <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg> },
+          ].map((c) => (
+            <div key={c.label} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+              <div className="flex items-start justify-between mb-3">
+                <span className="text-xs text-gray-400 font-medium">{c.label}</span>
+                <div className={`w-9 h-9 rounded-xl ${c.iconBg} flex items-center justify-center`}>{c.icon}</div>
+              </div>
+              <div className="text-2xl font-bold text-gray-900">{c.value}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{c.sub}</div>
+              {c.trend && (
+                <div className="flex items-center gap-1 mt-1.5">
+                  <svg className="w-3 h-3 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                  <span className="text-xs text-green-600 font-medium">{c.trend}</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
-      </section>
 
-      {/* How it works */}
-      <section id="how-it-works" className="py-20 px-8">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-black text-gray-900 mb-3">How It Works</h2>
-            <p className="text-gray-400 text-sm">Four simple steps to start winning and giving</p>
+        {/* Chart + Draw */}
+        <div className="grid grid-cols-2 gap-5">
+          <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 mb-0.5">Recent Scores</h3>
+            <p className="text-xs text-gray-400 mb-4">Last 5 Stableford scores</p>
+            <div className="h-[200px]"><SparklineChart scores={scores} /></div>
           </div>
-
-          <div className="grid grid-cols-4 gap-5">
-            {[
-              {
-                step: 'STEP 1',
-                title: 'Submit Scores',
-                desc: 'Enter your Stableford scores after each round. Your rolling best 5 are tracked automatically.',
-                icon: 'M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z'
-              },
-              {
-                step: 'STEP 2',
-                title: 'Enter Draws',
-                desc: 'Your subscription enters you into monthly prize draws with tiered jackpots based on score matching.',
-                icon: 'M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z'
-              },
-              {
-                step: 'STEP 3',
-                title: 'Give Back',
-                desc: 'A portion of every subscription goes directly to golf and community charities you care about.',
-                icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z'
-              },
-              {
-                step: 'STEP 4',
-                title: 'Win Prizes',
-                desc: 'Match scores to win from the prize pool. The more you play, the more chances to win.',
-                icon: 'M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z'
-              },
-            ].map((item) => (
-              <div key={item.step} className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
-                <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center mb-4">
-                  <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
-                  </svg>
-                </div>
-                <div className="text-xs font-bold text-gray-400 tracking-widest mb-2">{item.step}</div>
-                <h3 className="text-base font-bold text-gray-900 mb-2">{item.title}</h3>
-                <p className="text-xs text-gray-400 leading-relaxed">{item.desc}</p>
+          <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">March Draw</h3>
+              <div className="flex items-center gap-1.5 bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-semibold px-3 py-1 rounded-full">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                7 DAYS LEFT
               </div>
-            ))}
+            </div>
+            <div className="space-y-3">
+              {[
+                { label: '5-Match Jackpot', sub: '40% pool share', amt: '₹1,24,000', icon: '🏆', bg: 'bg-yellow-50' },
+                { label: '4-Match', sub: '35% pool share', amt: '₹1,08,500', icon: '⚡', bg: 'bg-blue-50' },
+                { label: '3-Match', sub: '25% pool share', amt: '₹77,500', icon: '⚡', bg: 'bg-blue-50' },
+              ].map((p) => (
+                <div key={p.label} className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-xl ${p.bg} flex items-center justify-center text-base flex-shrink-0`}>{p.icon}</div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-gray-900">{p.label}</div>
+                    <div className="text-xs text-gray-400">{p.sub}</div>
+                  </div>
+                  <div className="text-sm font-bold text-gray-900">{p.amt}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+                <span>Entries this month</span>
+                <span className="font-semibold text-gray-700">{scores.length} / 5</span>
+              </div>
+              <div className="bg-gray-100 rounded-full h-2">
+                <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${(scores.length / 5) * 100}%` }} />
+              </div>
+            </div>
           </div>
         </div>
-      </section>
 
-      {/* CTA */}
-      <section className="px-8 pb-20">
-        <div className="max-w-3xl mx-auto border-2 border-green-200 bg-white rounded-3xl p-14 text-center">
-          <h2 className="text-3xl font-black text-gray-900 mb-3">
-            Ready to make every round count?
-          </h2>
-          <p className="text-gray-400 text-sm mb-8">
-            Join thousands of golfers who play, win, and give back every month.
-          </p>
-          <Link href="/auth/signup"
-            className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-8 py-3.5 rounded-xl text-sm transition">
-            Join GolfGives →
-          </Link>
+        {/* Charity Impact + Recent Activity */}
+        <div className="grid grid-cols-2 gap-5">
+
+          {/* ── DYNAMIC Charity Impact ── */}
+          <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">Your Charity Impact</h3>
+              <div className="flex items-center gap-1 text-sm font-bold text-red-500">
+                <span>❤️</span>
+                <span>{totalCharityGiven} total</span>
+              </div>
+            </div>
+
+            {charityNames.length === 0 ? (
+              <div className="text-center py-6">
+                <div className="text-2xl mb-2">🌱</div>
+                <div className="text-sm text-gray-400">No charity selected yet</div>
+                <Link href="/dashboard/charity" className="inline-block mt-3 text-xs font-semibold text-green-600 hover:text-green-500 transition">
+                  Choose a charity →
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {charityNames.map((ch) => (
+                  <div key={ch.id} className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-pink-50 flex items-center justify-center text-base flex-shrink-0">🌱</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900">{ch.name}</div>
+                      <div className="text-xs text-gray-400">{ch.pct}% of subscription</div>
+                    </div>
+                    <div className="text-sm font-bold text-gray-900">
+                      ₹{Math.round(subscriptionBase * ch.pct / 100).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <Link href="/dashboard/charity"
+              className="mt-4 w-full block text-center bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 text-xs font-semibold py-2.5 rounded-xl transition">
+              {charityNames.length === 0 ? '+ Add Charity' : 'Change Charity'}
+            </Link>
+          </div>
+
+          {/* Recent Activity */}
+          <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Recent Activity</h3>
+            <div className="space-y-3">
+              {scores.length === 0 ? (
+                <div className="text-sm text-gray-400 text-center py-4">No activity yet</div>
+              ) : (
+                scores.slice(0, 3).map((s, i) => (
+                  <div key={s.id} className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="10" strokeWidth={1.5} /><circle cx="12" cy="12" r="3" strokeWidth={1.5} /></svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900">Score submitted</div>
+                      <div className="text-xs text-gray-400">{s.score} points · Stableford</div>
+                    </div>
+                    <div className="text-xs text-gray-400">{i === 0 ? '2 hours ago' : new Date(s.played_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>
+                  </div>
+                ))
+              )}
+              {charityNames.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-pink-50 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-gray-900">Charity updated</div>
+                    <div className="text-xs text-gray-400">{charityNames[0]?.name}</div>
+                  </div>
+                  <div className="text-xs text-gray-400">Recently</div>
+                </div>
+              )}
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-gray-900">Draw entered</div>
+                  <div className="text-xs text-gray-400">March 2026 draw</div>
+                </div>
+                <div className="text-xs text-gray-400">1 day ago</div>
+              </div>
+            </div>
+          </div>
         </div>
-      </section>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-100 px-8 py-6 flex justify-between items-center">
-        <div className="text-xs text-gray-400">© 2026 GolfGives. All rights reserved.</div>
-        <div className="flex gap-6 text-xs text-gray-400">
-          <Link href="#" className="hover:text-gray-600">Privacy</Link>
-          <Link href="#" className="hover:text-gray-600">Terms</Link>
-          <Link href="#" className="hover:text-gray-600">Contact</Link>
-        </div>
-      </footer>
-
+      </div>
     </main>
   )
 }

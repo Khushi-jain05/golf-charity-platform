@@ -1,6 +1,6 @@
 // components/Sidebar.tsx  ← update this file
 'use client'
-import { useState } from 'react'
+import { useState,useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
@@ -11,12 +11,16 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ profile, onToggle }: SidebarProps) {
+const [currentProfile, setCurrentProfile] = useState(profile)
   const router = useRouter()
   const pathname = usePathname()
   const [open, setOpen] = useState(true)
 
-  const initials = profile?.full_name
-    ?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || 'U'
+  const initials = currentProfile?.full_name
+  ?.split(' ')
+  .map((n: string) => n[0])
+  .join('')
+  .toUpperCase() || 'U'
 
   const handleToggle = () => {
     const next = !open
@@ -37,7 +41,22 @@ export default function Sidebar({ profile, onToggle }: SidebarProps) {
     { label: 'Profile',      href: '/dashboard/profile',      d: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
     { label: 'Settings',     href: '/dashboard/settings',     d: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' },
   ]
-
+  useEffect(() => {
+    const loadProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+  
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+  
+      if (data) setCurrentProfile(data)
+    }
+  
+    loadProfile()
+  }, [])
   return (
     <>
       <aside className={`bg-[#1a1f1a] flex flex-col fixed h-full z-20 transition-all duration-300 ease-in-out
@@ -98,8 +117,17 @@ export default function Sidebar({ profile, onToggle }: SidebarProps) {
                 {initials}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold text-white/80 truncate">{profile?.full_name}</div>
-                <div className="text-[10px] text-green-400/70">Pro Subscriber</div>
+              <div className="text-xs font-semibold text-white/80 truncate">
+  {currentProfile?.full_name}
+</div>
+
+<div className="text-[10px] text-green-400/70">
+  {currentProfile?.subscription_plan === 'champion'
+    ? 'Champion Subscriber'
+    : currentProfile?.subscription_plan === 'pro'
+    ? 'Pro Subscriber'
+    : 'Free Plan'}
+</div>
               </div>
             </div>
           )}
