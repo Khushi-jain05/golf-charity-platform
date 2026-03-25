@@ -45,7 +45,7 @@ export default function Charity() {
 
   const handleAdd = async (charityId: string, charityName: string) => {
     if (selectedIds.includes(charityId)) {
-      // Remove
+     
       const updated = selectedIds.filter(id => id !== charityId)
       setSaving(charityId)
       const { error } = await supabase
@@ -60,14 +60,14 @@ export default function Charity() {
       else { setSelectedIds(updated); showToast(`Removed ${charityName}`) }
       setSaving(null)
     } else {
-      // Add
+      
       const updated = [...selectedIds, charityId]
       setSaving(charityId)
       const { error } = await supabase
         .from('profiles')
         .update({
-          charity_id: charityId,          // primary charity (most recent)
-          charity_ids: updated,            // all selected
+          charity_id: charityId,          
+          charity_ids: updated,            
           charity_name: charityName,
           charity_percentage: 10,
         })

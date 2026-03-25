@@ -65,14 +65,14 @@ if (error) {
       })
       .eq('id', profile.id)
   
-    // ❌ BEFORE: you ignored error
+   
     if (error) {
       console.error('SAVE ERROR:', error)
       setSaving(false)
       return
     }
   
-    // ✅ Update local state AFTER successful DB save
+   
     setProfile((p: any) => ({
       ...p,
       full_name,
