@@ -60,14 +60,16 @@ export default function Scores() {
   const [course, setCourse] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [userId, setUserId] = useState('')
+  
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/auth/login'); return }
-      setUserId(user.id)
-      await fetchScores(user.id)
+      
+      if (user?.id) {
+        await fetchScores(user.id)
+      }
       setLoading(false)
     }
     load()
@@ -84,6 +86,15 @@ export default function Scores() {
     const val = parseInt(score)
     if (isNaN(val) || val < 1 || val > 45) { setError('Score must be between 1 and 45'); return }
     setAdding(true)
+    const { data, error: userError } = await supabase.auth.getUser()
+
+if (userError || !data?.user) {
+  setError("User not found")
+  setAdding(false)
+  return
+}
+
+const userId = data.user.id
     if (scores.length >= 5) {
       const oldest = scores[scores.length - 1]
       await supabase.from('scores').delete().eq('id', oldest.id)
@@ -100,10 +111,12 @@ export default function Scores() {
   }
 
   const handleDelete = async (id: string) => {
+    const { data } = await supabase.auth.getUser()
+    if (!data?.user) return
+  
     await supabase.from('scores').delete().eq('id', id)
-    await fetchScores(userId)
+    await fetchScores(data.user.id)
   }
-
   const avgScore = scores.length ? Math.round(scores.reduce((a, s) => a + s.score, 0) / scores.length * 10) / 10 : 0
   const bestScore = scores.length ? Math.max(...scores.map(s => s.score)) : 0
   const getStatus = (s: number) => {
